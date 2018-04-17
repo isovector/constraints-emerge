@@ -21,6 +21,7 @@ import TyCon
 import Type
 import CoreSyn
 import Outputable
+import InstEnv (InstEnvs (..), ClsInst (..), lookupUniqueInstEnv, lookupInstEnv)
 
 plugin :: Plugin
 plugin = defaultPlugin { tcPlugin = const (Just jdiPlugin) }
@@ -32,13 +33,26 @@ jdiPlugin =
            , tcPluginStop  = const (return ())
            }
 
-lookupJDITyCon :: TcPluginM (Class, Class)
+data JDI = JDI
+  { jdiJDI     :: Class
+  , jdiWorking :: Class
+  , jdiFail    :: Class
+  , jdiSucceed :: Class
+  }
+
+
+lookupJDITyCon :: TcPluginM JDI
 lookupJDITyCon = do
     Found _ md   <- findImportedModule jdiModule Nothing
     jdiTcNm <- lookupOrig md (mkTcOcc "JustDoIt")
     workingTcNm <- lookupOrig md (mkTcOcc "Working")
-    (,) <$> tcLookupClass jdiTcNm
+    failTcNm <- lookupOrig md (mkTcOcc "AlwaysFail")
+    succeedTcNm <- lookupOrig md (mkTcOcc "Succeed")
+    JDI
+        <$> tcLookupClass jdiTcNm
         <*> tcLookupClass workingTcNm
+        <*> tcLookupClass failTcNm
+        <*> tcLookupClass succeedTcNm
   where
     jdiModule  = mkModuleName "GHC.JustDoIt"
 
@@ -80,12 +94,12 @@ isJDI :: Class -> Ct -> Bool
 isJDI c = isJust . getJDI c
 
 
-solveJDI :: (Class, Class) -- ^ JDI's TyCon
+solveJDI :: JDI
          -> [Ct]  -- ^ [G]iven constraints
          -> [Ct]  -- ^ [D]erived constraints
          -> [Ct]  -- ^ [W]anted constraints
          -> TcPluginM TcPluginResult
-solveJDI (jdi, w) [] [] [ws]
+solveJDI (JDI jdi w _ _) [] [] [ws]
   | Just (pred, [c]) <- getJDI jdi ws
   = let (dest, loc) = getLoc ws
      in pure $ TcPluginOk [] [ CNonCanonical $ CtDerived c loc
@@ -93,14 +107,56 @@ solveJDI (jdi, w) [] [] [ws]
                              , CNonCanonical $ CtDerived (mkClassPred w []) loc
                              , ws
                              ]
-solveJDI (_, w) [] [ws] _
+
+-- solved it
+solveJDI (JDI j w _ succ) [] [ws] [z]
   | Just _ <- getJDI w ws
-  = pprPanic "solved it" $ ppr w
+  , Just (a, [b]) <- getJDI j z
+  = do
+    let Just ok = splitTyConApp_maybe b
+    myclass <- tcLookupClass (tyConName $ fst ok)
+    envs <- getInstEnvs
+    classdfun <- case lookupUniqueInstEnv envs myclass $ snd ok of
+      Right (clsInst, _) -> pure $ is_dfun clsInst
+        -- pprPanic "great" $ ppr clsInst
+        -- pure $ TcPluginOk
+        --   [ (EvLit $ EvNum 0, ws)
+        --   , (EvDFunApp (is_dfun clsInst) [b] [], z)
+        --   ]
+        --   []
+      Left err -> pprPanic "fuck" $ ppr succ
+
+    case lookupUniqueInstEnv envs succ [b] of
+      Right (clsInst, _) ->
+        pure $ TcPluginOk
+          [ (EvLit $ EvNum 0, ws)
+          , (EvDFunApp (is_dfun clsInst) [b] [EvDFunApp classdfun [] []], z)
+          ]
+          []
+      Left err -> pprPanic "fuck" $ ppr succ
+
+-- did not solve it
+solveJDI (JDI j _ fail envs) [] [a, b] [z]
+  | any (isJDI j) [z]
+  = do
+    envs <- getInstEnvs
+    case lookupUniqueInstEnv envs fail [] of
+      Right (clsInst, _) ->
+        pure $ TcPluginOk
+          [ (EvLit $ EvNum 0, a)
+          , (EvLit $ EvNum 0, b)
+          , (EvDFunApp (is_dfun clsInst) [] [], z)
+          ]
+          []
+      Left err -> pprPanic "fuck" $ ppr $ ie_global envs
+
+-- lookupUniqueInstEnv :: InstEnvs -> Class -> [Type] -> Either MsgDoc (ClsInst, [Type])
 
 -- solveJDI jdiCls [] [z] [ws]
 --   | Just c <- getJDI jdiCls ws
 --   = pprPanic "solved it" $ ppr z
 
-solveJDI _ g d w =
-  pprPanic "did not solve it" $ ppr [g, d, w]
+-- solveJDI _ a b c = pprPanic "lame" $ ppr (a, b, c)
+
+solveJDI _ a b c = pure $ TcPluginOk [] []
 
