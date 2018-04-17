@@ -1,12 +1,15 @@
-{-# LANGUAGE CPP, TupleSections #-}
 module GHC.JustDoIt.Plugin ( plugin )
 where
+{-# LANGUAGE CPP, TupleSections #-}
 
 -- external
 import Data.Maybe
 import Control.Monad
 import Data.List (partition)
+import Control.Exception (throw)
+import GHC (GhcException (..))
 
+import VarEnv
 import TcType (TcPredType)
 -- GHC API
 import Module     (mkModuleName)
@@ -100,6 +103,7 @@ solveJDI :: JDI
          -> [Ct]  -- ^ [D]erived constraints
          -> [Ct]  -- ^ [W]anted constraints
          -> TcPluginM TcPluginResult
+-- start
 solveJDI (JDI jdi w _ _) _ [] [ws]
   | Just (pred, [c]) <- getJDI jdi ws
   = let (dest, loc) = getLoc ws
@@ -145,18 +149,36 @@ solveJDI (JDI j w _ succ) _ [ws] [z]
 
 -- did not solve it
 solveJDI (JDI j _ fail _) _ [a, b] [z]
-  | any (isJDI j) [z]
-  = do
-    envs <- getInstEnvs
-    case lookupUniqueInstEnv envs fail [] of
-      Right (clsInst, _) ->
-        pure $ TcPluginOk
-          [ (EvLit $ EvNum 0, a)
-          , (EvLit $ EvNum 0, b)
-          , (EvDFunApp (is_dfun clsInst) [] [], z)
-          ]
-          []
-      Left err -> pprPanic "fuck" $ ppr $ ie_global envs
+  | Just (_, [t])  <- getJDI j z
+  , Just (c, ts) <- splitTyConApp_maybe t
+  =
+  case any isTyVarTy ts of
+    True ->
+      let (dest, loc) = getLoc z
+       in throw $ PprProgramError "" $ helpMe c ts loc
+    False -> do
+      envs <- getInstEnvs
+      case lookupUniqueInstEnv envs fail [] of
+        Right (clsInst, _) ->
+          pure $ TcPluginOk
+            [ (EvLit $ EvNum 0, a)
+            , (EvLit $ EvNum 0, b)
+            , (EvDFunApp (is_dfun clsInst) [] [], z)
+            ]
+            []
+        Left err -> pprPanic "fuck" $ ppr $ ie_global envs
+
+-- solveJDI (JDI j _ fail _) _ [a, b] [z]
+--   | Just (p, [t])  <- getJDI j z
+--   , Just (_, ts) <- splitTyConApp_maybe t
+--   , any isTyVarTy ts
+--   = pure $ TcPluginOk
+--           [ (EvLit $ EvNum 0, a)
+--           , (EvLit $ EvNum 0, b)
+--           ]
+--           [ let (dest, loc) = getLoc z
+--              in CNonCanonical $ CtGiven p dest loc
+--           ]
 
 -- lookupUniqueInstEnv :: InstEnvs -> Class -> [Type] -> Either MsgDoc (ClsInst, [Type])
 
@@ -166,5 +188,19 @@ solveJDI (JDI j _ fail _) _ [a, b] [z]
 
 -- solveJDI _ a b c = pprPanic "lame" $ ppr (a, b, c)
 
+-- solveJDI _ a [] c = pprPanic "lool" $ empty
 solveJDI _ a b c = pure $ TcPluginOk [] []
 
+
+helpMe :: TyCon -> [Type] -> CtLoc -> SDoc
+helpMe c ts loc = foldl ($$) empty
+  [ ppr (tcl_loc $ ctl_env loc)
+  , hang empty 2 $ (char '•') <+>
+    (
+      hang empty 2 $ text "Polymorphic type variables bound in the implicit constraint of 'JustDoIt'" $$ hang empty 2 (ppr (ctl_origin loc))
+    )
+  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'JustDoIt ("
+      <> ppr c
+      <+> foldl (<+>) empty (fmap ppr $ ts )
+      <> text ")' constraint to the type signature"
+  ]

@@ -17,14 +17,22 @@ import Data.Constraint
 -- showInt = justDoIt
 
 
-showIt :: forall c. JustDoIt (Show c) => c -> String
-showIt c =
-  case justDoIt @(Show c) of
-    Just Dict -> show c
-    Nothing   -> "<<not gonna do it>>"
+-- showIt :: forall c. JustDoIt (Show c) => c -> String
+-- showIt c =
+--   case justDoIt @(Show c) of
+--     Just Dict -> show c
+--     Nothing   -> "<<not gonna do it>>"
 
-showId   = showIt id
-showBool = showIt True
+-- showId   = showIt id
+-- showBool = showIt True
+
+showFoo :: forall cbar.  cbar -> String
+showFoo c =
+  case justDoIt @(Show cbar) of
+    Just Dict -> show c
+    Nothing -> "bad"
+
+-- showMe = showFoo
 
 -- showAll :: forall c. c -> String
 -- showAll c =
