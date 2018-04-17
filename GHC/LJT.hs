@@ -167,7 +167,7 @@ isSumType ty
                         (mkWildValBinder (exprType e)) e
            | dc <- dcs]
           destruct = \e vs alts ->
-            Case e (mkWildValBinder (exprType e)) (exprType (head alts)) 
+            Case e (mkWildValBinder (exprType e)) (exprType (head alts))
             [ let pats = map newVar (dataConInstArgTys dc ty_args) in
               (DataAlt dc, pats, mkLetNonRec v (mkCoreVarTup pats) rhs)
             | (dc,v,rhs) <- zip3 dcs vs alts ]

@@ -1,9 +1,17 @@
-module GHC.JustDoIt ( JustDoIt, justDoIt, (…) ) where
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
-class JustDoIt a where justDoIt' :: a
+module GHC.JustDoIt ( JustDoIt, justDoIt) where
 
-justDoIt :: JustDoIt a => a
+import Data.Kind
+import Data.Constraint
+
+class JustDoIt (a :: Constraint) where
+  justDoIt' :: Maybe (Dict a)
+
+class Working
+
+justDoIt :: JustDoIt c => Maybe (Dict c)
 justDoIt = justDoIt'
 
-(…) :: JustDoIt a => a
-(…) = justDoIt'
