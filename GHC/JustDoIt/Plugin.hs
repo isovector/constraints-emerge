@@ -5,6 +5,7 @@ where
 -- external
 import Data.Maybe
 import Control.Monad
+import Data.List (partition)
 
 import TcType (TcPredType)
 -- GHC API
@@ -99,7 +100,7 @@ solveJDI :: JDI
          -> [Ct]  -- ^ [D]erived constraints
          -> [Ct]  -- ^ [W]anted constraints
          -> TcPluginM TcPluginResult
-solveJDI (JDI jdi w _ _) [] [] [ws]
+solveJDI (JDI jdi w _ _) _ [] [ws]
   | Just (pred, [c]) <- getJDI jdi ws
   = let (dest, loc) = getLoc ws
      in pure $ TcPluginOk [] [ CNonCanonical $ CtDerived c loc
@@ -109,7 +110,7 @@ solveJDI (JDI jdi w _ _) [] [] [ws]
                              ]
 
 -- solved it
-solveJDI (JDI j w _ succ) [] [ws] [z]
+solveJDI (JDI j w _ succ) _ [ws] [z]
   | Just _ <- getJDI w ws
   , Just (a, [b]) <- getJDI j z
   = do
@@ -124,7 +125,7 @@ solveJDI (JDI j w _ succ) [] [ws] [z]
         --   , (EvDFunApp (is_dfun clsInst) [b] [], z)
         --   ]
         --   []
-      Left err -> pprPanic "fuck" $ ppr succ
+      Left err -> pprPanic "fuck1" $ ppr succ
 
     case lookupUniqueInstEnv envs succ [b] of
       Right (clsInst, _) ->
@@ -133,10 +134,17 @@ solveJDI (JDI j w _ succ) [] [ws] [z]
           , (EvDFunApp (is_dfun clsInst) [b] [EvDFunApp classdfun [] []], z)
           ]
           []
-      Left err -> pprPanic "fuck" $ ppr succ
+      Left err -> pprPanic "fuck2" $ ppr succ
+
+-- -- recursive case
+-- solveJDI jdi@(JDI j _ _ _) _ n@[a, b] [z]
+--   | any (isJDI j) [z]
+--   , any (isJDI j) n
+--   = let (m, n') = partition (isJDI j) n
+--      in solveJDI jdi [] m (z : n')
 
 -- did not solve it
-solveJDI (JDI j _ fail envs) [] [a, b] [z]
+solveJDI (JDI j _ fail _) _ [a, b] [z]
   | any (isJDI j) [z]
   = do
     envs <- getInstEnvs

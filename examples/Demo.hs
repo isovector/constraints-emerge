@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds                        #-}
+{-# LANGUAGE FlexibleContexts                       #-}
 {-# LANGUAGE GADTs                                  #-}
 {-# LANGUAGE ScopedTypeVariables                    #-}
 {-# LANGUAGE TemplateHaskell, LambdaCase, EmptyCase #-}
@@ -6,7 +8,6 @@
 
 import GHC.JustDoIt
 
-import Prelude hiding (id, flip, const, curry)
 import Data.Constraint
 
 -- showFunc :: Maybe (Dict (Show (Int -> Bool)))
@@ -15,11 +16,15 @@ import Data.Constraint
 -- showInt :: Maybe (Dict (Show Int))
 -- showInt = justDoIt
 
-showIt :: forall c. c -> String
+
+showIt :: forall c. JustDoIt (Show c) => c -> String
 showIt c =
   case justDoIt @(Show c) of
     Just Dict -> show c
-    Nothing   -> "<uncool>"
+    Nothing   -> "<<not gonna do it>>"
+
+showId   = showIt id
+showBool = showIt True
 
 -- showAll :: forall c. c -> String
 -- showAll c =
