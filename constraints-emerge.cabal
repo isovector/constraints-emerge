@@ -35,9 +35,9 @@ tested-with:         GHC ==8.0.2
 library
   exposed-modules:     Data.Constraint.Emerge.Plugin
   exposed-modules:     Data.Constraint.Emerge
-  build-depends:       base >=4.9 && <5
+  build-depends:       base >=4.8 && <5
   build-depends:       hashable
-  build-depends:       ghc >=8.0.2
+  build-depends:       ghc >=7.10.0
   build-depends:       constraints
   default-language:    Haskell2010
 
@@ -47,7 +47,7 @@ Test-Suite tests
   other-modules:    EmergeSpec
   hs-Source-Dirs:   test
   main-is:          Main.hs
-  build-depends:    base >=4.9 && <4.10, constraints, hspec, constraints-emerge
+  build-depends:    base >=4.8 && <5, constraints, hspec, constraints-emerge
 
 source-repository head
   type:     git
