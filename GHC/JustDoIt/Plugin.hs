@@ -1,37 +1,30 @@
-{-# LANGUAGE CPP, TupleSections #-}
+{-# OPTIONS_GHC -Wall #-}
 
-module GHC.JustDoIt.Plugin ( plugin ) where
+module GHC.JustDoIt.Plugin (plugin) where
 
+import Control.Exception (throw)
+import Control.Monad
+import Data.Maybe
+import Prelude hiding (pred)
 
--- external
-import           Control.Exception (throw)
-import           Control.Monad
-import           Data.IORef
-import           Data.List (partition)
-import           Data.Maybe
-import Data.Foldable (for_)
-
--- GHC API
-import VarEnv
-import TcType (TcPredType)
-import Module     (mkModuleName)
-import OccName    (mkTcOcc)
-import Plugins    (Plugin (..), defaultPlugin)
-import TcEvidence
+import Class hiding (className)
+import GHC (GhcException (..))
+import InstEnv (ClsInst (..), lookupUniqueInstEnv)
+import Module (mkModuleName)
+import OccName (mkTcOcc)
+import Outputable
+import Plugins (Plugin (..), defaultPlugin)
+import TcEvidence (EvTerm (EvDFunApp))
 import TcPluginM
 import TcRnTypes
-import Class
-import CoreUtils
-import MkCore
-import TyCon
-import Type
-import CoreSyn
-import Outputable
-import InstEnv (InstEnvs (..), ClsInst (..), lookupUniqueInstEnv, lookupInstEnv)
-import GHC (GhcException (..))
+import TcType (TcPredType)
+import TyCon (TyCon, tyConName)
+import Type (Type, splitTyConApp_maybe, isTyVarTy)
+
 
 plugin :: Plugin
 plugin = defaultPlugin { tcPlugin = const (Just jdiPlugin) }
+
 
 jdiPlugin :: TcPlugin
 jdiPlugin =
@@ -60,19 +53,6 @@ lookupJDITyCon = do
   where
     jdiModule  = mkModuleName "GHC.JustDoIt"
 
--- wrap :: Class -> CoreExpr -> EvTerm
--- wrap cls = EvExpr . appDc
---   where
---     tyCon = classTyCon cls
---     dc = tyConSingleDataCon tyCon
---     appDc x = mkCoreConApps dc [Type (exprType x), x]
-
-findClassConstraint :: Class -> Ct -> Maybe (Ct, Type)
-findClassConstraint cls ct = do
-    (cls', [t]) <- getClassPredTys_maybe (ctPred ct)
-    guard (cls' == cls)
-    return (ct, t)
-
 
 getJDI :: Class -> Ct -> Maybe (Ct, TcPredType, [Type])
 getJDI c ct =
@@ -88,10 +68,7 @@ getJDI' ct c pred =
     _ -> Nothing
 
 getLoc :: Ct -> CtLoc
-getLoc c = ctev_loc $ cc_ev c
-
-isJDI :: Class -> Ct -> Bool
-isJDI c = isJust . getJDI c
+getLoc = ctev_loc . cc_ev
 
 
 solveJDI :: JDI
@@ -131,110 +108,22 @@ discharge jdi (ct, _, ts) = do
     Right (clsInst, _) -> do
       let dfun = is_dfun clsInst
       case lookupUniqueInstEnv envs (jdiSucceed jdi) ts of
-        Right (clsInst, _) ->
+        Right (successInst, _) ->
           pure
-            (EvDFunApp (is_dfun clsInst) ts [EvDFunApp dfun [] []], ct)
+            (EvDFunApp (is_dfun successInst) ts [EvDFunApp dfun [] []], ct)
         Left err ->
-          pprPanic "fuck2" $ text "couldn't suceed??"
+          pprPanic "couldn't get a unique instance for Success" err
 
-    -- failure
-    Left err -> do
+    -- couldn't find the instance
+    Left _ -> do
       when (any isTyVarTy classParams) $ do
         throw $ PprProgramError "" $ helpMe className classParams loc
 
       case lookupUniqueInstEnv envs (jdiFail jdi) [] of
         Right (clsInst, _) ->
           pure (EvDFunApp (is_dfun clsInst) [] [], ct)
-        Left err -> pprPanic "fuck" $ text "couldn't fail!"
-
-
--- -- did not solve it
--- solveJDI (JDI j _ fail _) _ [a, b] [z]
---   | Just (_, [t])  <- getJDI j z
---   , Just (c, ts) <- splitTyConApp_maybe t
---   =
---   case any isTyVarTy ts of
---     True ->
---       let (dest, loc) = getLoc z
---        in throw $ PprProgramError "" $ helpMe c ts loc
---     False -> do
---       envs <- getInstEnvs
---       case lookupUniqueInstEnv envs fail [] of
---         Right (clsInst, _) ->
---           pure $ TcPluginOk
---             [ (EvLit $ EvNum 0, a)
---             , (EvLit $ EvNum 0, b)
---             , (EvDFunApp (is_dfun clsInst) [] [], z)
---             ]
---             []
---         Left err -> pprPanic "fuck" $ ppr $ ie_global envs
-
-
--- -- start
--- solveJDI (JDI jdi w _) _ [] [ws]
---   | Just (pred, [c]) <- getJDI jdi ws
---   = let (dest, loc) = getLoc ws
---      in pure $ TcPluginOk [] [ CNonCanonical $ CtDerived c loc
---                              , CNonCanonical $ CtDerived pred loc
---                              , CNonCanonical $ CtDerived (mkClassPred w []) loc
---                              , ws
---                              ]
-
--- -- solved it
--- solveJDI (JDI j _ succ) _ [ws] [z]
---   | Just _ <- getJDI w ws
---   , Just (a, [b]) <- getJDI j z
---   = do
---     let Just ok = splitTyConApp_maybe b
---     myclass <- tcLookupClass (tyConName $ fst ok)
---     envs <- getInstEnvs
---     classdfun <- case lookupUniqueInstEnv envs myclass $ snd ok of
---       Right (clsInst, _) -> pure $ is_dfun clsInst
---         -- pprPanic "great" $ ppr clsInst
---         -- pure $ TcPluginOk
---         --   [ (EvLit $ EvNum 0, ws)
---         --   , (EvDFunApp (is_dfun clsInst) [b] [], z)
---         --   ]
---         --   []
---       Left err -> pprPanic "fuck1" $ ppr succ
-
---     case lookupUniqueInstEnv envs succ [b] of
---       Right (clsInst, _) ->
---         pure $ TcPluginOk
---           [ (EvLit $ EvNum 0, ws)
---           , (EvDFunApp (is_dfun clsInst) [b] [EvDFunApp classdfun [] []], z)
---           ]
---           []
---       Left err -> pprPanic "fuck2" $ ppr succ
-
--- -- -- recursive case
--- -- solveJDI jdi@(JDI j _ _ _) _ n@[a, b] [z]
--- --   | any (isJDI j) [z]
--- --   , any (isJDI j) n
--- --   = let (m, n') = partition (isJDI j) n
--- --      in solveJDI jdi [] m (z : n')
-
--- -- solveJDI (JDI j _ fail _) _ [a, b] [z]
--- --   | Just (p, [t])  <- getJDI j z
--- --   , Just (_, ts) <- splitTyConApp_maybe t
--- --   , any isTyVarTy ts
--- --   = pure $ TcPluginOk
--- --           [ (EvLit $ EvNum 0, a)
--- --           , (EvLit $ EvNum 0, b)
--- --           ]
--- --           [ let (dest, loc) = getLoc z
--- --              in CNonCanonical $ CtGiven p dest loc
--- --           ]
-
--- -- lookupUniqueInstEnv :: InstEnvs -> Class -> [Type] -> Either MsgDoc (ClsInst, [Type])
-
--- -- solveJDI jdiCls [] [z] [ws]
--- --   | Just c <- getJDI jdiCls ws
--- --   = pprPanic "solved it" $ ppr z
-
-
--- -- solveJDI _ a [] c = pprPanic "lool" $ empty
--- solveJDI _ a b c = pure $ TcPluginOk [] []
+        Left err ->
+          pprPanic "couldn't get a unique instance for AlwaysFail" err
 
 
 helpMe :: TyCon -> [Type] -> CtLoc -> SDoc
@@ -249,6 +138,8 @@ helpMe c ts loc = foldl ($$) empty
       <+> foldl (<+>) empty (fmap ppr $ ts )
       <> text ")' constraint to the type signature"
   ]
+
+
 helpMe2 :: CtLoc -> SDoc
 helpMe2 loc = foldl ($$) empty
   [ ppr (tcl_loc $ ctl_env loc)

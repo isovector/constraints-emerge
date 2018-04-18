@@ -10,7 +10,6 @@
 
 module MySpec where
 
-import Data.Maybe (isJust, isNothing)
 import GHC.JustDoIt
 import Data.Constraint (Dict (..))
 import Test.Hspec
@@ -81,6 +80,9 @@ spec = do
 
     it "WORKS: int to int" $ do
       brokenToInt 5 `shouldBe` 5
+
+    it "BROKEN: get self" $ do
+      justDoIt @(JustDoIt (JustDoIt (Show Int))) `shouldBe` Nothing
 
 
 
