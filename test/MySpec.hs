@@ -1,37 +1,36 @@
-{-# LANGUAGE ConstraintKinds                 #-}
-{-# LANGUAGE FlexibleContexts                #-}
-{-# LANGUAGE FlexibleInstances               #-}
-{-# LANGUAGE GADTs                           #-}
-{-# LANGUAGE MultiParamTypeClasses           #-}
-{-# LANGUAGE ScopedTypeVariables             #-}
-{-# LANGUAGE TypeApplications                #-}
-{-# OPTIONS_GHC -fplugin=GHC.JustDoIt.Plugin #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE ConstraintKinds                           #-}
+{-# LANGUAGE FlexibleContexts                          #-}
+{-# LANGUAGE FlexibleInstances                         #-}
+{-# LANGUAGE GADTs                                     #-}
+{-# LANGUAGE MultiParamTypeClasses                     #-}
+{-# LANGUAGE ScopedTypeVariables                       #-}
+{-# LANGUAGE TypeApplications                          #-}
+{-# OPTIONS_GHC -fno-warn-orphans                      #-}
+{-# OPTIONS_GHC -fplugin=GHC.Emerge.Plugin #-}
 
 module MySpec where
 
-import GHC.JustDoIt
-import Data.Constraint (Dict (..))
+import GHC.Emerge
 import Test.Hspec
 
 
-getMultiParam :: forall a b. JustDoIt (MultiParam a b) => Maybe (a, b)
+getMultiParam :: forall a b. Emerge (MultiParam a b) => Maybe (a, b)
 getMultiParam =
-  case justDoIt @(MultiParam a b) of
+  case emerge @(MultiParam a b) of
     Just Dict -> Just multiParam
     Nothing -> Nothing
 
 
-showAnything :: forall c. JustDoIt (Show c) => c -> String
+showAnything :: forall c. Emerge (Show c) => c -> String
 showAnything c =
-  case justDoIt @(Show c) of
+  case emerge @(Show c) of
     Just Dict -> show c
     Nothing -> "<<unshowable>>"
 
 
-brokenToInt :: forall c. JustDoIt (c ~ Int) => c -> Int
+brokenToInt :: forall c. Emerge (c ~ Int) => c -> Int
 brokenToInt c =
-  case justDoIt @(c ~ Int) of
+  case emerge @(c ~ Int) of
     Just Dict -> c
     Nothing   -> 17
 
@@ -40,16 +39,16 @@ spec :: Spec
 spec = do
   describe "dictionary lookups" $ do
     it "Show Int" $ do
-      justDoIt @(Show Int) `shouldBe` Just Dict
+      emerge @(Show Int) `shouldBe` Just Dict
 
     it "Show function" $ do
-      justDoIt @(Show (Bool -> Int)) `shouldBe` Nothing
+      emerge @(Show (Bool -> Int)) `shouldBe` Nothing
 
     it "Show locally defined instance" $ do
-      justDoIt @(Show (MyType -> MyType)) `shouldBe` Just Dict
+      emerge @(Show (MyType -> MyType)) `shouldBe` Just Dict
 
     it "Show orphan instance" $ do
-      justDoIt @(Show (String -> String)) `shouldBe` Just Dict
+      emerge @(Show (String -> String)) `shouldBe` Just Dict
 
 
   describe "dictionary usages" $ do
@@ -82,7 +81,7 @@ spec = do
       brokenToInt 5 `shouldBe` 5
 
     it "BROKEN: get self" $ do
-      justDoIt @(JustDoIt (JustDoIt (Show Int))) `shouldBe` Nothing
+      emerge @(Emerge (Emerge (Show Int))) `shouldBe` Nothing
 
 
 
