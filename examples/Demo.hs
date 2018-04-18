@@ -4,9 +4,9 @@
 {-# LANGUAGE ScopedTypeVariables                       #-}
 {-# LANGUAGE TemplateHaskell, LambdaCase, EmptyCase    #-}
 {-# LANGUAGE TypeApplications                          #-}
-{-# OPTIONS_GHC -fplugin=GHC.Emerge.Plugin #-}
+{-# OPTIONS_GHC -fplugin=Data.Constraint.Emerge.Plugin #-}
 
-import GHC.Emerge
+import Data.Constraint.Emerge
 
 showFunc :: Maybe (Dict (Show (Int -> Bool)))
 showFunc = emerge

@@ -32,8 +32,8 @@ cabal-version:       >=1.10
 tested-with:         GHC ==8.5.*
 
 library
-  exposed-modules:     GHC.Emerge.Plugin
-  exposed-modules:     GHC.Emerge
+  exposed-modules:     Data.Constraint.Emerge.Plugin
+  exposed-modules:     Data.Constraint.Emerge
   build-depends:       base >=4.11 && <4.12
   build-depends:       hashable
   build-depends:       ghc >=8.5

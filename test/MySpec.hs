@@ -6,11 +6,11 @@
 {-# LANGUAGE ScopedTypeVariables                       #-}
 {-# LANGUAGE TypeApplications                          #-}
 {-# OPTIONS_GHC -fno-warn-orphans                      #-}
-{-# OPTIONS_GHC -fplugin=GHC.Emerge.Plugin #-}
+{-# OPTIONS_GHC -fplugin=Data.Constraint.Emerge.Plugin #-}
 
 module MySpec where
 
-import GHC.Emerge
+import Data.Constraint.Emerge
 import Test.Hspec
 
 

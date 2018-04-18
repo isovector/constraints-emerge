@@ -4,7 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
-module GHC.Emerge
+module Data.Constraint.Emerge
   ( Emerge
   , emerge
   , Dict (..)

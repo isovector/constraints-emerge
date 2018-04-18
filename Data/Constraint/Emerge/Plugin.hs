@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 
-module GHC.Emerge.Plugin (plugin) where
+module Data.Constraint.Emerge.Plugin (plugin) where
 
 import Control.Exception (throw)
 import Control.Monad
@@ -38,7 +38,7 @@ emergePlugin = TcPlugin
 
 
 ------------------------------------------------------------------------------
--- | Class instances from 'GHC.Emerge' necessary for us to know
+-- | Class instances from 'Data.Constraint.Emerge' necessary for us to know
 -- about.
 data EmergeData = EmergeData
   { emergeEmerge  :: Class
@@ -48,12 +48,12 @@ data EmergeData = EmergeData
 
 
 ------------------------------------------------------------------------------
--- | Lookup the classes from 'GHC.Emerge' and build an
+-- | Lookup the classes from 'Data.Constraint.Emerge' and build an
 -- 'EmergeData'.
 lookupEmergeTyCons :: TcPluginM EmergeData
 lookupEmergeTyCons = do
     Found _ md  <- findImportedModule emergeModule Nothing
-    emergeTcNm  <- lookupOrig md $ mkTcOcc "EmergeData"
+    emergeTcNm  <- lookupOrig md $ mkTcOcc "Emerge"
     failTcNm    <- lookupOrig md $ mkTcOcc "AlwaysFail"
     succeedTcNm <- lookupOrig md $ mkTcOcc "Succeed"
 
@@ -62,7 +62,7 @@ lookupEmergeTyCons = do
         <*> tcLookupClass failTcNm
         <*> tcLookupClass succeedTcNm
   where
-    emergeModule  = mkModuleName "GHC.EmergeData"
+    emergeModule  = mkModuleName "Data.Constraint.Emerge"
 
 
 ------------------------------------------------------------------------------
