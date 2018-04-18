@@ -10,7 +10,6 @@ module Data.Constraint.Emerge
   , Dict (..)
   ) where
 
-import Data.Kind
 import Data.Constraint
 
 
