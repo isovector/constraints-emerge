@@ -1,5 +1,5 @@
 name:                constraints-emerge
-version:             0.1
+version:             0.1.1
 synopsis:            Defer instance lookups until runtime
 description:
     This plugin allows you to write
