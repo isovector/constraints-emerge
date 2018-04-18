@@ -18,7 +18,7 @@
 
 ```haskell
 {-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE FlexibleConstraints #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# OPTIONS_GHC -fplugin=Data.Constraint.Emerge.Plugin #-}
