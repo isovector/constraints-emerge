@@ -1,21 +1,9 @@
 resolver: lts-9.0
-allow-newer: true
-package-indices:
-  - name: head.hackage
-    download-prefix: http://head.hackage.haskell.org/package/
-    http: http://head.hackage.haskell.org/01-index.tar.gz
-  - name: Hackage
-    download-prefix: https://hackage.haskell.org/package/
-    http: https://hackage.haskell.org/01-index.tar.gz
-
 
 packages:
 - '.'
 
-extra-deps:
-- constraint-0.1.1.1
-- category-0.2.0.1
-- alg-0.2.0.0
+extra-deps: []
 
 flags: {}
 

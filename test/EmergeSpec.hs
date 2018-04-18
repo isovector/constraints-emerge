@@ -8,7 +8,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans                      #-}
 {-# OPTIONS_GHC -fplugin=Data.Constraint.Emerge.Plugin #-}
 
-module MySpec where
+module EmergeSpec where
 
 import Data.Constraint.Emerge
 import Test.Hspec
