@@ -1,51 +1,64 @@
-ghc-justdoit: a GHC plugin to write the code for you
-=========================================
+# constraints-emerge: defer instance lookups until runtime
 
-This is a prototype of a code synthesis plugin for GHC, which uses LJT proof
-search to instantiate a type.
+## Dedication
 
-Synopsis
---------
+> Failure should be our teacher, not our undertaker. Failure is delay, not
+> defeat. It is a temporary detour, not a dead end. Failure is something we can
+> avoid only by saying nothing, doing nothing, and being nothing.
+>
+> Denis Waitley
 
-    {-# OPTIONS_GHC -fplugin=GHC.JustDoIt.Plugin #-}
-    module Test where
 
-    import GHC.JustDoIt
+## Synopsis
 
-    foo :: ((a -> r) -> r) -> (a -> ((b -> r) -> r)) -> ((b -> r) -> r)
-    foo = (…)
+```haskell
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleConstraints #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# OPTIONS_GHC -fplugin=Data.Constraint.Emerge.Plugin #-}
 
-Missing bits
-------------
+module Test where
 
- * The LJT might not be complete, due to insufficient backtracking.
- * The implementation is very much unoptimized.
- * It returns one solution, but not necessary the “best” one. But what is the “best” one?
- * It ignores any recursive type, so it cannot do anything with lists. It would be much more useful if it could do some best-effort thing her as well.
+import Data.Constraint.Emerge
+
+showAnything :: forall c. Emerge (Show c) => c -> String
+showAnything c =
+  case emerge @(Show c) of
+    Just Dict -> show c
+    Nothing -> "<<unshowable>>"
+
+
+showBool = showAnything True  -- "True"
+showId   = showAnything id    -- "<<unshowable>>"
+```
+
+
+## Known Bugs
+
+* `constraints-emerge` fails to provide `Emerge c` dictionaries at runtime.
+* `constraints-emerge` will generate type-equality dictionaries any types (even
+    ones that aren't equal!!!)
 
 If someone wants to pick it up from here, that’d be great!
 
 
-Related work
-------------
+## Related Work
 
- * [Djinn](http://hackage.haskell.org/package/djinn) and [djinn-ghc](http://hackage.haskell.org/package/djinn-ghc)
- * [exference](http://hackage.haskell.org/package/exference)
- * [curryhoward](https://github.com/Chymyst/curryhoward) for Scala
- * [hezarfen](https://github.com/joom/hezarfen) for Idris
+ * [union-constraints](https://github.com/rampion/constraint-unions)
+ * [Data.Constraint.Deferrable](https://github.com/ekmett/constraints/)
 
-Contact
--------
 
-Please reports bugs and missing features at the [GitHub bugtracker]. This is
-also where you can find the [source code].
+## Contact
 
-`bSpokeLight` was written by [Joachim Breitner] and is licensed under a
-permissive MIT [license].
+Please reports bugs and missing features at the [GitHub bugtracker][issuses]. This is
+also where you can find the [source code][source].
 
-[GitHub bugtracker]: https://github.com/nomeata/ghc-justdoit/issues
-[source code]: https://github.com/nomeata/ghc-justdoit
-[Joachim Breitner]: http://www.joachim-breitner.de/
-[license]: https://github.com/nomeata/ghc-justdoit/blob/LICENSE
+`constraints-emerge` was written by [Sandy Maguire][me] and is licensed under a
+permissive MIT [license][lic].
 
+[me]: http://reasonablypolymorphic.me
+[lic]: https://github.com/isovector/constraints-emerge/blob/LICENSE
+[issues]: https://github.com/isovector/constraints-emerge/issues
+[source]: https://github.com/isovector/constraints-emerge
 
