@@ -1,5 +1,10 @@
 # constraints-emerge: defer instance lookups until runtime
 
+[![Build Status](https://api.travis-ci.org/isovector/constraints-emerge.svg?branch=master)](https://travis-ci.org/isovector/constraints-emerge) | [Hackage][hackage]
+
+[hackage]: https://hackage.haskell.org/package/constraints-emerge
+
+
 ## Dedication
 
 > Failure should be our teacher, not our undertaker. Failure is delay, not
