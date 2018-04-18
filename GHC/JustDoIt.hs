@@ -25,8 +25,6 @@ class Succeed (a :: Constraint) where
 instance c => Succeed c where
   succeed = Just Dict
 
-class Working
-
 justDoIt :: JustDoIt c => Maybe (Dict c)
 justDoIt = justDoIt'
 

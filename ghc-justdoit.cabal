@@ -37,8 +37,17 @@ library
   build-depends:       base >=4.11 && <4.12
   build-depends:       hashable
   build-depends:       ghc >=8.5
-  build-depends:       constraint
+  build-depends:       constraints
+  build-depends:       hspec
   default-language:    Haskell2010
+
+Test-Suite tests
+  type:             exitcode-stdio-1.0
+  default-language: Haskell2010
+  other-modules:    MySpec
+  hs-Source-Dirs:   test
+  main-is:          Main.hs
+  build-depends:    base >=4.9 && <4.10, constraints, hspec, ghc-justdoit
 
 source-repository head
   type:     git

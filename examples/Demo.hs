@@ -26,13 +26,27 @@ import Data.Constraint
 -- showId   = showIt id
 -- showBool = showIt True
 
-showFoo :: forall cbar.  cbar -> String
-showFoo c =
-  case justDoIt @(Show cbar) of
-    Just Dict -> show c
-    Nothing -> "bad"
+-- showFoo :: forall cbar. JustDoIt (Show cbar) => cbar -> String
+-- showFoo c =
+--     case justDoIt @(Show cbar) of
+--       Just Dict -> show c
+--       Nothing ->  "fail2"
 
--- showMe = showFoo
+
+
+
+-- asInt :: forall c. JustDoIt (c ~ Int) => c -> Int
+-- asInt c =
+--   case justDoIt @(c ~ Int) of
+--     Just Dict -> c
+--     Nothing -> 0
+
+breakingBad :: forall c. JustDoIt c => Maybe (Dict c)
+breakingBad = justDoIt @c
+
+-- showBad = showFoo (5 :: Int)
+-- showBad2 = showFoo True
+-- showBad3 = showFoo id
 
 -- showAll :: forall c. c -> String
 -- showAll c =
