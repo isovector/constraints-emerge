@@ -36,9 +36,11 @@ showId   = showAnything id    -- "<<unshowable>>"
 
 ## Known Bugs
 
-* `constraints-emerge` fails to provide `Emerge c` dictionaries at runtime.
 * `constraints-emerge` will generate type-equality dictionaries any types (even
-    ones that aren't equal!!!)
+    ones that aren't equal :scream: :scream: :scream:)
+* It fails to provide `Emerge c` dictionaries at runtime.
+* The generated error messages mention mangled type variables; it would be cool
+    if they didn't.
 
 If someone wants to pick it up from here, that’d be great!
 
@@ -51,7 +53,7 @@ If someone wants to pick it up from here, that’d be great!
 
 ## Contact
 
-Please reports bugs and missing features at the [GitHub bugtracker][issuses]. This is
+Please reports bugs and missing features at the [GitHub bugtracker][issues]. This is
 also where you can find the [source code][source].
 
 `constraints-emerge` was written by [Sandy Maguire][me] and is licensed under a
