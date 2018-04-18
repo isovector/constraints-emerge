@@ -147,9 +147,10 @@ helpMe c ts loc = foldl ($$) empty
   [ ppr (tcl_loc $ ctl_env loc)
   , hang empty 2 $ (char '•') <+>
     (
-      hang empty 2 $ text "Polymorphic type variables bound in the implicit constraint of 'JustDoIt'" $$ hang empty 2 (ppr (ctl_origin loc))
+      hang empty 2 $ text "Polymorphic type variables bound in the implicit constraint of 'Emerge'"
+                  $$ hang empty 2 (ppr (ctl_origin loc))
     )
-  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'JustDoIt ("
+  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'Emerge ("
       <> ppr c
       <+> foldl (<+>) empty (fmap ppr $ ts )
       <> text ")' constraint to the type signature"
@@ -161,8 +162,10 @@ helpMe2 loc = foldl ($$) empty
   [ ppr (tcl_loc $ ctl_env loc)
   , hang empty 2 $ (char '•') <+>
     (
-      hang empty 2 $ text "Polymorphic constraint bound in the implicit constraint of 'JustDoIt'" $$ hang empty 2 (ppr (ctl_origin loc))
+      hang empty 2 $ text "Polymorphic constraint bound in the implicit constraint of 'Emerge'"
+                  $$ hang empty 2 (ppr (ctl_origin loc))
     )
-  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'JustDoIt c'"
+  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'Emerge c'"
       <+> text "constraint to the type signature"
   ]
+
