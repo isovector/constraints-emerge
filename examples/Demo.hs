@@ -8,19 +8,17 @@
 
 import Data.Constraint.Emerge
 
-showFunc :: Maybe (Dict (Show (Int -> Bool)))
-showFunc = emerge
+import Control.Monad.Trans.Writer
 
-showInt :: Maybe (Dict (Show Int))
-showInt = emerge
+lol :: forall e m. Emerge (Monad (WriterT e m)) => Maybe (Dict (Monad (WriterT e m)))
+lol = emerge @(Monad (WriterT e m))
 
-
-showIt :: forall c. Emerge (Show c) => c -> String
-showIt c =
+showAnything :: forall c. Emerge (Show c) => c -> String
+showAnything c =
   case emerge @(Show c) of
     Just Dict -> show c
-    Nothing   -> "<<not gonna do it>>"
+    Nothing   -> "<<unshowable>>"
 
-showId   = showIt id
-showBool = showIt True
+showBool = showAnything True
+showId = emerge
 
