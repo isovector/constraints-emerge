@@ -10,8 +10,18 @@
 
 module EmergeSpec where
 
+import Control.Monad.Trans.Writer (WriterT)
 import Data.Constraint.Emerge
 import Test.Hspec
+
+
+getWriterTMonad
+    :: forall e m z
+     . ( z ~ Monad (WriterT e m)
+       , Emerge z
+       )
+    => Maybe (Dict z)
+getWriterTMonad = emerge @z
 
 
 getMultiParam :: forall a b. Emerge (MultiParam a b) => Maybe (a, b)
@@ -34,6 +44,10 @@ brokenToInt c =
     Just Dict -> c
     Nothing   -> 17
 
+-- showTree :: Emerge (Show a) => a -> Int -> String
+-- showTree v 0 = showAnything v
+-- showTree v n = showTree (v, v) (n - 1)
+
 
 spec :: Spec
 spec = do
@@ -50,6 +64,10 @@ spec = do
     it "Show orphan instance" $ do
       emerge @(Show (String -> String)) `shouldBe` Just Dict
 
+    it "complicated subdicts for WriterT" $ do
+      getWriterTMonad @[Int] @IO `shouldBe` Just Dict
+      getWriterTMonad @Int   @IO `shouldBe` Nothing
+
 
   describe "dictionary usages" $ do
     it "showAnything 5" $ do
@@ -59,7 +77,11 @@ spec = do
       showAnything True `shouldBe` show True
 
     it "showAnything id" $ do
-      showAnything id `shouldBe` "<<unshowable>>"
+      showAnything (id @Int) `shouldBe` "<<unshowable>>"
+
+    it "showAnything (5, (6, True)" $ do
+      showAnything (5 :: Double, (6 :: Int, True))
+        `shouldBe` show (5 :: Double, (6 :: Int, True))
 
     it "getMultiParam @Int @Bool" $ do
       getMultiParam `shouldBe` Just (1 :: Int, True)
@@ -74,11 +96,11 @@ spec = do
 
 
   describe "bugs" $ do
-    it "BROKEN: bool to int" $ do
-      brokenToInt True `shouldNotBe` 17
+    it "WORKS: bool to int" $ do
+      brokenToInt True `shouldBe` 17
 
-    it "WORKS: int to int" $ do
-      brokenToInt 5 `shouldBe` 5
+    it "BROKEN: int to int" $ do
+      brokenToInt (5 :: Int) `shouldNotBe` 5
 
     it "BROKEN: get self" $ do
       emerge @(Emerge (Emerge (Show Int))) `shouldBe` Nothing

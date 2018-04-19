@@ -2,16 +2,16 @@
 
 module Data.Constraint.Emerge.Plugin (plugin) where
 
-import Data.Bifunctor (first, second)
-import Data.Tuple (swap)
+import           Control.Exception (throw)
+import           Control.Monad
+import           Data.Bifunctor (second)
+import           Data.Map (Map)
 import qualified Data.Map as M
-import Data.Map (Map)
-import Control.Exception (throw)
-import Control.Monad
-import Data.Maybe
-import Prelude hiding (pred)
+import           Data.Maybe
+import           Data.Traversable (for)
+import           Data.Tuple (swap)
+import           Prelude hiding (pred)
 
-import UniqSet (isEmptyUniqSet)
 import TcType
 import Class hiding (className)
 import GHC (GhcException (..), idType)
@@ -24,15 +24,16 @@ import TcEvidence (EvTerm (EvDFunApp))
 import TcPluginM
 import TcRnTypes
 import TyCon (TyCon, tyConName)
--- import Type (Type, splitTyConApp_maybe, isTyVarTy, pprSigmaType, splitAppTy_maybe)
-import Type
+import Type (Type, TyVar, splitTyConApp_maybe, isTyVarTy, splitAppTy_maybe, getTyVar_maybe, splitAppTys)
 
 
 ------------------------------------------------------------------------------
--- | match an instance head against a concrete type
+-- | Match an instance head against a concrete type; returning a substitution
+-- from one to the other. If this returns 'mempty', there were no type
+-- variables to match.
 match
-    :: Type  -- class inst
-    -> Type  -- concrete type
+    :: PredType  -- class inst
+    -> PredType  -- concrete type
     -> Map TyVar Type
 match instClass concClass =
   let Just (_, instHead) = splitAppTy_maybe instClass
@@ -43,6 +44,24 @@ match instClass concClass =
                  $ zip concTys instTys
 
 
+------------------------------------------------------------------------------
+-- | Determine if a 'PredType' is fully monomorphic (ie. has no type
+-- variables.)
+isMonomorphicCtx
+    :: PredType
+    -> Bool
+isMonomorphicCtx t = isJust $ do
+  (_, instHead) <- splitAppTy_maybe t
+  let (_, instTys) = splitAppTys instHead
+  case null $ mapMaybe getTyVar_maybe instTys of
+    True  -> Just ()
+    False -> Nothing
+
+
+------------------------------------------------------------------------------
+-- | Substitute all type variables in a 'Type'.
+-- TODO(sandy): this should probably operate over a 'PredType' and explicily
+-- split and fold, rather than assuming a shape of 'C a b c'.
 instantiateHead
     :: Map TyVar Type
     -> Type
@@ -54,16 +73,17 @@ instantiateHead mmap t =
 
 
 ------------------------------------------------------------------------------
--- | we can use givens' 'EvVar's as 'EvId' terms
+-- | Construct an 'EvTerm' witnessing an instance of 'wantedDict' by
+-- recursively finding instances, and building dicts for their contexts.
 buildDict
     :: CtLoc
-    -> Type
+    -> PredType
     -> TcPluginM (Maybe EvTerm)
 buildDict loc wantedDict = do
   (className, classParams) <-
     case splitTyConApp_maybe wantedDict of
       Just a  -> pure a
-      Nothing -> throw $ PprProgramError "" $ helpMe2 loc
+      Nothing -> errMissingSig loc
 
   myclass <- tcLookupClass $ tyConName className
   envs    <- getInstEnvs
@@ -79,14 +99,13 @@ buildDict loc wantedDict = do
          then pure . Just $ EvDFunApp dfun [] []
          else do
            mayDicts <- traverse (buildDict loc . instantiateHead mmap) subclasses
-           case sequence mayDicts of
-             -- fail if any of our subdicts failed
-             Nothing -> pure Nothing
-             Just dicts -> pure . Just $ EvDFunApp dfun (fmap (mmap M.!) vars) $ dicts
-    Left err -> do
+
+           for (sequence mayDicts) $ \dicts ->
+             pure $ EvDFunApp dfun (fmap (mmap M.!) vars) dicts
+
+    Left _ -> do
       -- check givens?
       pure Nothing
-
 
 
 ------------------------------------------------------------------------------
@@ -136,7 +155,7 @@ lookupEmergeTyCons = do
 ------------------------------------------------------------------------------
 -- | Determines if 'ct' is an instance of the 'c' class, and if so, splits out
 -- its applied types.
-findEmergePred :: Class -> Ct -> Maybe (Ct, [Type])
+findEmergePred :: Class -> Ct -> Maybe (Ct, [PredType])
 findEmergePred c ct = do
   let pred = ctev_pred $ cc_ev ct
   case splitTyConApp_maybe pred of
@@ -148,13 +167,6 @@ findEmergePred c ct = do
 
 
 ------------------------------------------------------------------------------
--- | Get the original source location a 'Ct' came from. Used to generate error
--- messages.
-getLoc :: Ct -> CtLoc
-getLoc = ctev_loc . cc_ev
-
-
-------------------------------------------------------------------------------
 -- | Discharge all wanted 'Emerge' constraints.
 solveEmerge
     :: EmergeData
@@ -163,50 +175,48 @@ solveEmerge
     -> [Ct]  -- ^ [W]anted constraints
     -> TcPluginM TcPluginResult
 solveEmerge emerge _ _ allWs = do
-  let ws = mapMaybe (findEmergePred (emergeEmerge emerge)) $ allWs
+  let ws = mapMaybe (findEmergePred $ emergeEmerge emerge) allWs
   case length ws of
     0 -> pure $ TcPluginOk [] []
     _ -> do
-      z <- traverse (discharge emerge) ws
-      pure $ TcPluginOk z []
+      evs <- for ws $ discharge emerge
+      pure $ TcPluginOk evs []
 
 
 ------------------------------------------------------------------------------
 -- | Discharge an 'Emerge' constraint.
 discharge
     :: EmergeData
-    -> (Ct, [Type])
+    -> (Ct, [PredType])
     -> TcPluginM (EvTerm, Ct)
 discharge emerge (ct, ts) = do
   let [wantedDict] = ts
-      loc = getLoc ct
+      loc = ctev_loc $ cc_ev ct
+
+  when (not $ isMonomorphicCtx wantedDict) $
+    errPolyUsage loc
 
   (className, classParams) <-
     case splitTyConApp_maybe wantedDict of
       Just a  -> pure a
-      Nothing -> throw $ PprProgramError "" $ helpMe2 loc
+      Nothing -> errMissingSig loc
 
-  myclass <- tcLookupClass (tyConName className)
-  envs <- getInstEnvs
-
-  -- when (not $ isEmptyUniqSet $ allBoundVariables wantedDict) $
-  -- pprPanic "bye" $ ppr $ allBoundVariables wantedDict
-
+  envs      <- getInstEnvs
   mayMyDict <- buildDict loc wantedDict
+
   case mayMyDict of
+    -- we successfully built a dict
     Just myDict ->
       case lookupUniqueInstEnv envs (emergeSucceed emerge) ts of
-        Right (successInst, _) -> pure
-            -- TODO(sandy): need to type apply classParams
-            -- and get dicts for them somehow
-            (EvDFunApp (is_dfun successInst) ts [myDict], ct)
+        Right (successInst, _) ->
+          pure (EvDFunApp (is_dfun successInst) ts [myDict], ct)
         Left err ->
           pprPanic "couldn't get a unique instance for Success" err
 
     -- couldn't find the instance
     Nothing -> do
-      when (any isTyVarTy classParams) $ do
-        throw $ PprProgramError "" $ helpMe className classParams loc
+      when (any isTyVarTy classParams) $
+        errPolyClassTys className classParams loc
 
       case lookupUniqueInstEnv envs (emergeFail emerge) [] of
         Right (clsInst, _) ->
@@ -215,27 +225,50 @@ discharge emerge (ct, ts) = do
           pprPanic "couldn't get a unique instance for AlwaysFail" err
 
 
-helpMe :: TyCon -> [Type] -> CtLoc -> SDoc
-helpMe c ts loc = foldl ($$) empty
-  [ ppr (tcl_loc $ ctl_env loc)
-  , hang empty 2 $ (char '•') <+>
-    (
-      hang empty 2 $ text "Polymorphic type variables bound in the implicit constraint of 'JustDoIt'" $$ hang empty 2 (ppr (ctl_origin loc))
-    )
-  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'JustDoIt ("
+------------------------------------------------------------------------------
+-- | Error out complaining about polymorphic type variables in the implicit
+-- context.
+errPolyClassTys :: TyCon -> [Type] -> CtLoc -> a
+errPolyClassTys c ts loc = errHelper loc
+  [ text "Polymorphic type variables bound in the implicit constraint of 'Emerge'"
+      $$ hang empty 2 (ppr (ctl_origin loc))
+  , text "Probable fix: add an explicit 'Emerge ("
       <> ppr c
       <+> foldl (<+>) empty (fmap ppr $ ts )
       <> text ")' constraint to the type signature"
   ]
 
 
-helpMe2 :: CtLoc -> SDoc
-helpMe2 loc = foldl ($$) empty
-  [ ppr (tcl_loc $ ctl_env loc)
-  , hang empty 2 $ (char '•') <+>
-    (
-      hang empty 2 $ text "Polymorphic constraint bound in the implicit constraint of 'JustDoIt'" $$ hang empty 2 (ppr (ctl_origin loc))
-    )
-  , hang empty 2 $ (char '•') <+> text "Probable fix: add an explicit 'JustDoIt c'"
+------------------------------------------------------------------------------
+-- | Erorr out complaining about a polymorphic constraint.
+errMissingSig :: CtLoc -> a
+errMissingSig loc = errHelper loc
+  [ text "Polymorphic constraint bound in the implicit constraint of 'Emerge'"
+      $$ hang empty 2 (ppr (ctl_origin loc))
+  , text "Probable fix: add an explicit 'Emerge c'"
       <+> text "constraint to the type signature"
   ]
+
+
+------------------------------------------------------------------------------
+-- | Error out complaining about a polymorphic usage.
+errPolyUsage :: CtLoc -> a
+errPolyUsage loc = errHelper loc
+  [ text "Polymorphic usage of function bound with an implicit 'Emerge' constraint"
+      $$ hang empty 2 (ppr (ctl_origin loc))
+  , text "'Emerge' can only be discharged when it is fully monomorphic"
+  , text "Fix: make the call-site monomorphic, or add an explicit 'Emerge c'"
+      $$ hang empty 2 (text "constraint to the type-signature.")
+  ]
+
+
+------------------------------------------------------------------------------
+-- | Helper function to generate pretty error messages.
+errHelper :: CtLoc -> [SDoc] -> a
+errHelper loc ss
+  = throw
+  . PprProgramError ""
+  . hang (ppr . tcl_loc $ ctl_env loc) 2
+  . foldl ($$) empty
+  $ fmap (\z -> hang empty 0 $ char '•' <+> z) ss
+
