@@ -41,8 +41,7 @@ showId   = showAnything id    -- "<<unshowable>>"
 
 ## Known Bugs
 
-* `constraints-emerge` will generate type-equality dictionaries any types (even
-    ones that aren't equal :scream: :scream: :scream:)
+* `constraints-emerge` will fail to generate type-equality dictionaries
 * It fails to provide `Emerge c` dictionaries at runtime.
 * The generated error messages mention mangled type variables; it would be cool
     if they didn't.
