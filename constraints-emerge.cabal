@@ -1,5 +1,5 @@
 name:                constraints-emerge
-version:             0.1
+version:             0.1.2
 synopsis:            Defer instance lookups until runtime
 description:
     This plugin allows you to write
@@ -14,8 +14,10 @@ description:
     showAnything c =
       case emerge @(Show c) of
         Just Dict -> show c
-        Nothing   -> "<<unshowable>>"
+        Nothing   -> "&#123;&#123;unshowable&#125;&#125;"
     @
+    .
+    where the 'Emerge (Show c)'  will automatically be discharged for any monomorphic 'c'.
     .
     See <https://github.com/isovector/constraints-emerge/blob/master/test/EmergeSpec.hs test/EmergeSpec.hs>
     for a few examples of what this plugin can do for you.
