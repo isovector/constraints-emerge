@@ -2,13 +2,19 @@
 
 module Data.Constraint.Emerge.Plugin (plugin) where
 
+import Data.Bifunctor (first, second)
+import Data.Tuple (swap)
+import qualified Data.Map as M
+import Data.Map (Map)
 import Control.Exception (throw)
 import Control.Monad
 import Data.Maybe
 import Prelude hiding (pred)
 
+import UniqSet (isEmptyUniqSet)
+import TcType
 import Class hiding (className)
-import GHC (GhcException (..))
+import GHC (GhcException (..), idType)
 import InstEnv (ClsInst (..), lookupUniqueInstEnv)
 import Module (mkModuleName)
 import OccName (mkTcOcc)
@@ -18,7 +24,69 @@ import TcEvidence (EvTerm (EvDFunApp))
 import TcPluginM
 import TcRnTypes
 import TyCon (TyCon, tyConName)
-import Type (Type, splitTyConApp_maybe, isTyVarTy)
+-- import Type (Type, splitTyConApp_maybe, isTyVarTy, pprSigmaType, splitAppTy_maybe)
+import Type
+
+
+------------------------------------------------------------------------------
+-- | match an instance head against a concrete type
+match
+    :: Type  -- class inst
+    -> Type  -- concrete type
+    -> Map TyVar Type
+match instClass concClass =
+  let Just (_, instHead) = splitAppTy_maybe instClass
+      Just (_, concHead) = splitAppTy_maybe concClass
+      (_, instTys) = splitAppTys instHead
+      (_, concTys) = splitAppTys concHead
+   in M.fromList . mapMaybe (fmap swap . sequence . second getTyVar_maybe)
+                 $ zip concTys instTys
+
+
+instantiateHead
+    :: Map TyVar Type
+    -> Type
+    -> Type
+instantiateHead mmap t =
+  let (tc, tys) = splitAppTys t
+      tys' = fmap (\ty -> maybe ty (mmap M.!) $ getTyVar_maybe ty) tys
+   in mkAppTys tc tys'
+
+
+------------------------------------------------------------------------------
+-- | we can use givens' 'EvVar's as 'EvId' terms
+buildDict
+    :: CtLoc
+    -> Type
+    -> TcPluginM (Maybe EvTerm)
+buildDict loc wantedDict = do
+  (className, classParams) <-
+    case splitTyConApp_maybe wantedDict of
+      Just a  -> pure a
+      Nothing -> throw $ PprProgramError "" $ helpMe2 loc
+
+  myclass <- tcLookupClass $ tyConName className
+  envs    <- getInstEnvs
+
+  case lookupUniqueInstEnv envs myclass classParams of
+    -- success!
+    Right (clsInst, _) -> do
+      let dfun = is_dfun clsInst
+          (vars, subclasses, inst) = tcSplitSigmaTy $ idType dfun
+          mmap = match inst wantedDict
+
+      if null subclasses
+         then pure . Just $ EvDFunApp dfun [] []
+         else do
+           mayDicts <- traverse (buildDict loc . instantiateHead mmap) subclasses
+           case sequence mayDicts of
+             -- fail if any of our subdicts failed
+             Nothing -> pure Nothing
+             Just dicts -> pure . Just $ EvDFunApp dfun (fmap (mmap M.!) vars) $ dicts
+    Left err -> do
+      -- check givens?
+      pure Nothing
+
 
 
 ------------------------------------------------------------------------------
@@ -120,18 +188,23 @@ discharge emerge (ct, ts) = do
 
   myclass <- tcLookupClass (tyConName className)
   envs <- getInstEnvs
-  case lookupUniqueInstEnv envs myclass classParams of
-    -- success!
-    Right (clsInst, _) -> do
-      let dfun = is_dfun clsInst
+
+  -- when (not $ isEmptyUniqSet $ allBoundVariables wantedDict) $
+  -- pprPanic "bye" $ ppr $ allBoundVariables wantedDict
+
+  mayMyDict <- buildDict loc wantedDict
+  case mayMyDict of
+    Just myDict ->
       case lookupUniqueInstEnv envs (emergeSucceed emerge) ts of
         Right (successInst, _) -> pure
-            (EvDFunApp (is_dfun successInst) ts [EvDFunApp dfun [] []], ct)
+            -- TODO(sandy): need to type apply classParams
+            -- and get dicts for them somehow
+            (EvDFunApp (is_dfun successInst) ts [myDict], ct)
         Left err ->
           pprPanic "couldn't get a unique instance for Success" err
 
     -- couldn't find the instance
-    Left _ -> do
+    Nothing -> do
       when (any isTyVarTy classParams) $ do
         throw $ PprProgramError "" $ helpMe className classParams loc
 
