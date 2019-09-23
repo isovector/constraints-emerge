@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Data.Constraint.Emerge.Plugin (plugin) where
 
@@ -10,7 +11,7 @@ import qualified Data.Map as M
 import           Data.Maybe
 import           Data.Traversable (for)
 import           Data.Tuple (swap)
-import           Prelude hiding (pred)
+import           Prelude hiding ((<>), pred)
 
 import TcType
 import Class hiding (className)
@@ -20,7 +21,7 @@ import Module (mkModuleName)
 import OccName (mkTcOcc)
 import Outputable
 import Plugins (Plugin (..), defaultPlugin)
-import TcEvidence (EvTerm (EvDFunApp))
+import TcEvidence (EvTerm (EvExpr), evDFunApp)
 import TcPluginM
 import TcRnTypes
 import TyCon (TyCon, tyConName)
@@ -96,12 +97,13 @@ buildDict loc wantedDict = do
           mmap = match inst wantedDict
 
       if null subclasses
-         then pure . Just $ EvDFunApp dfun [] []
+         then pure . Just $ evDFunApp dfun [] []
          else do
            mayDicts <- traverse (buildDict loc . instantiateHead mmap) subclasses
 
            for (sequence mayDicts) $ \dicts ->
-             pure $ EvDFunApp dfun (fmap (mmap M.!) vars) dicts
+             let onlyEes = mapMaybe (\case EvExpr ee -> Just ee; _ -> Nothing) in
+             pure $ evDFunApp dfun (fmap (mmap M.!) vars) $ onlyEes dicts
 
     Left _ -> do
       -- check givens?
@@ -206,21 +208,21 @@ discharge emerge (ct, ts) = do
 
   case mayMyDict of
     -- we successfully built a dict
-    Just myDict ->
+    Just (EvExpr myDict) ->
       case lookupUniqueInstEnv envs (emergeSucceed emerge) ts of
         Right (successInst, _) ->
-          pure (EvDFunApp (is_dfun successInst) ts [myDict], ct)
+          pure (evDFunApp (is_dfun successInst) ts [myDict], ct)
         Left err ->
           pprPanic "couldn't get a unique instance for Success" err
 
     -- couldn't find the instance
-    Nothing -> do
+    _ -> do
       when (any isTyVarTy classParams) $
         errPolyClassTys className classParams loc
 
       case lookupUniqueInstEnv envs (emergeFail emerge) [] of
         Right (clsInst, _) ->
-          pure (EvDFunApp (is_dfun clsInst) [] [], ct)
+          pure (evDFunApp (is_dfun clsInst) [] [], ct)
         Left err ->
           pprPanic "couldn't get a unique instance for AlwaysFail" err
 
